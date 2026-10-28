@@ -1,0 +1,22 @@
+version: 2
+
+# Un único PR semanal con todas las actualizaciones (acciones de GitHub y dependencias de pip).
+multi-ecosystem-groups:
+  semanal:
+    schedule:
+      interval: weekly
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    multi-ecosystem-group: semanal
+    patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    multi-ecosystem-group: semanal
+    patterns: ["*"]

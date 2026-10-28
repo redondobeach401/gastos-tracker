@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key   # bloquea claves .pem / privadas
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 6eaad039603a4de39fddd1cf5f727391efe9974e  # frozen: v8.30.0
+    hooks:
+      - id: gitleaks             # bloquea contraseñas, tokens y cadenas de conexión
+
+  - repo: local
+    hooks:
+      - id: no-db-url-password
+        name: bloquea URLs de base de datos con contraseña
+        language: pygrep
+        entry: '(postgres(ql)?|mysql|mongodb(\+srv)?)://[^\s:/@]+:[^\s@]+@'
+        types: [text]
+        exclude: ^\.pre-commit-config\.yaml$
+      - id: genera-readme
+        name: regenera las tablas del README
+        language: python
+        entry: python scripts/gen_readme.py
+        files: ^(\.pre-commit-config\.yaml|\.github/workflows/.*\.yml|README\.md|scripts/gen_readme\.py)$
+        pass_filenames: false
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 44b5042edab9382aba712eed4f9c7bab7a3d6a3e  # frozen: v0.17.0
+    hooks:
+      - id: ruff
+        args: [--fix]

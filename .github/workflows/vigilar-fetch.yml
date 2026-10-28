@@ -1,0 +1,31 @@
+name: vigilar-fetch
+on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC, bastantes horas después del fetch diario
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: vigilar-fetch
+  cancel-in-progress: false
+jobs:
+  vigilar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: prod        # solo para leer los secrets de Telegram
+    permissions:
+      contents: read
+      actions: read          # lista las ejecuciones de fetch-bank
+      issues: write          # publica el aviso (scripts/notify.sh)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Independiente de cron-job.org: si deja de lanzar fetch-bank, esto lo detecta y avisa
+      - name: Comprobar que fetch-bank se ha ejecutado
+        run: bash scripts/check_fetch.sh

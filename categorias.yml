@@ -1,0 +1,170 @@
+# Reglas de categorización de fetch.py. Para añadir una, edita este fichero: no hace falta tocar el código.
+# Los tests (tests/test_rules.py) validan el fichero y comprueban cada regla con sus `ejemplos`.
+#
+# Los patrones son expresiones regulares que se buscan dentro de la descripción del movimiento
+# (nombre de la contraparte + concepto), sin distinguir mayúsculas de minúsculas.
+# Usa comillas simples: así las barras invertidas (\b, \.) se escriben tal cual.
+
+# Categorías que existen en tus informes. Una regla con una categoría que no esté aquí (un "Comdia" mal
+# escrito) hace fallar los tests. Si creas una categoría nueva, añádela primero a esta lista.
+# "Ingresos" la asigna el código a todo importe positivo.
+categorias_permitidas:
+  - Alquiler
+  - Bizum
+  - Comida
+  - Compras
+  - Entrenamiento
+  - Eventos/Ocio Puntual
+  - Ingresos
+  - Ocio
+  - Salud
+  - Seguros
+  - Servicios
+  - Tarjeta
+  - Tarjeta Crédito
+  - Transporte
+  - Uber Eats
+  - Viajes
+
+# Qué significa cada categoría, para la IA (ia.py). Imprescindible en las que aún no tienen gastos en el
+# historial: sin ejemplos, la IA solo ve el nombre y responde NO_SE. Opcional en el resto.
+# No hace falta describir "Ingresos": la IA solo clasifica gastos.
+descripciones:
+  Alquiler: pago mensual del piso (alquiler y gastos del piso); a menudo el concepto es solo el nombre del mes
+  Bizum: pagos a personas por Bizum (cenas a medias, cumpleaños, cañas, regalos)
+  Comida: solo compra de comida en supermercados y tiendas de alimentación (Aldi); comer fuera NO es Comida, es Ocio
+  Compras: compras de cosas (Amazon, perfumería, libros) que no encajan en una categoría más concreta
+  Entrenamiento: gimnasio y deporte (Basic-Fit, calistenia, entrenos)
+  Eventos/Ocio Puntual: conciertos, cine, entradas y planes sueltos de una sola vez
+  Ocio: comer y beber fuera (bares, tabernas, restaurantes, cafés, bocaterías, helados) y salidas del día a día
+  Salud: farmacias y gastos médicos
+  Seguros: primas de seguros (Sanitas, seguro del Apple Watch)
+  Servicios: suscripciones y servicios recurrentes (Apple, Anthropic, HBO Max, software)
+  Tarjeta: comisiones y cuotas de la propia tarjeta bancaria (emisión, envío, mantenimiento)
+  Tarjeta Crédito: pago o liquidación de la deuda de la tarjeta de crédito (amortización, liquidación de gastos), no sus comisiones
+  Transporte: transporte diario en tu ciudad (metro, abono CRTM)
+  Uber Eats: pedidos de comida a domicilio con Uber Eats
+  Viajes: gastos de viaje fuera de casa (trenes, vuelos, y transporte y comercios del destino, como el destino); tu ciudad habitual es casa, no viaje
+
+# Viajes: todo gasto del banco entre `desde` y `hasta` (ambos incluidos, fecha valor) pasa a Viajes y guarda el
+# nombre del viaje (columna viaje, vista v_gasto_por_viaje), salvo lo de las categorías de `no_cambian` (cargos que
+# se pagan igual estando en casa) y lo categorizado a mano. Se aplica en cada fetch a todo el histórico: añadir un
+# viaje pasado o cambiar sus fechas lo corrige solo. Tu ciudad y las de siempre son casa: no se añaden aquí.
+viajes:
+  no_cambian: [Alquiler, Bizum, Compras, Entrenamiento, Seguros, Servicios, Tarjeta, Tarjeta Crédito]
+  fechas:
+    - nombre: Escapada de ejemplo
+      desde: 2026-01-09
+      hasta: 2026-01-12
+
+# Palabras que la categorización por historial (categorize.py) no usa para decidir: lugares y palabras
+# genéricas que no dicen qué es el comercio. Sin esto, "AMSTERDAM" (de un viaje) haría "Viajes" de cualquier
+# compra en Amsterdam. Da igual mayúsculas o acentos. Añade aquí cualquier palabra que veas decidir sin motivo.
+palabras_ignoradas:
+  # Lugares que aparecen en las descripciones del banco
+  - Madrid
+  - León
+  - Amsterdam
+  - Bussum
+  - Luxembourg
+  - Cork
+  - Stockholm
+  - Spain
+  # Otros lugares habituales
+  - Barcelona
+  - Valencia
+  - Sevilla
+  - Bilbao
+  - Málaga
+  - Zaragoza
+  - España
+  - Netherlands
+  - Ireland
+  - Dublin
+  - London
+  - Paris
+  - Lisboa
+  - Berlin
+  # Palabras genéricas de pasarelas de pago y webs
+  - Help
+  - Bill
+  - App
+  - PayPal
+  - The
+  - Sin
+  - Concepto
+
+# Traspasos entre cuentas propias: se marcan con is_transfer y se excluyen de gastos e ingresos.
+traspasos:
+  patrones:
+    - 'Ahorro para Hucha principal'
+    - 'Move to save'
+    - 'OFF TO SAVE'
+    - 'b100'
+    - 'Payment from Nombre Apellido'  # lado Revolut de un traspaso desde otra cuenta propia
+    - 'PARA INTERESES.*(TRF\.PERIODICA|NOMBRE APELLIDO)'
+    - 'TRASPASO AUTOMATICO DE'  # lado ingreso de un traspaso desde otra cuenta propia (el pago de al lado sigue siendo gasto)
+  # Descripción exacta + importe (en valor absoluto)
+  exactos:
+    - descripcion: "."
+      importe: 400
+
+# Categoría de los gastos. LA PRIMERA REGLA QUE COINCIDA GANA, así que el orden importa
+# (por eso "calistenia" va antes que "bizum"). Los importes positivos son siempre "Ingresos".
+# Cada regla necesita al menos un ejemplo real: el test comprueba que acaba en esa categoría.
+categorias:
+  - categoria: Entrenamiento
+    patron: 'calistenia|entreno'
+    ejemplos: ['CALISTENIA MADRID - cuota octubre']
+
+  - categoria: Bizum
+    patron: 'PAGO BIZUM'
+    ejemplos: ['PAGO BIZUM A JUAN']
+
+  - categoria: Seguros
+    patron: 'SANITAS'
+    ejemplos: ['SANITAS SEGUROS']
+
+  - categoria: Viajes
+    patron: 'RENFE|IBERIA|OVPAY'
+    ejemplos: ['RENFE VIAJEROS', 'OVPAY AMSTERDAM']
+
+  - categoria: Transporte
+    patron: 'APP CRTM|METRO DE MADRID'
+    ejemplos: ['APP CRTM', 'METRO DE MADRID']
+
+  - categoria: Comida
+    patron: 'ALDI|\bMARKET\b'
+    ejemplos: ['ALDI SUPERMERCADOS', 'MARKET EJEMPLO \MADRID\ES0000000000']
+
+  - categoria: Ocio
+    patron: 'BOCATERIA|\bBAR\b|TABERNA|ESPECIALIDADCAFE'
+    ejemplos: ['BAR LA ESQUINA', 'LA TABERNA DEL EJEMPLO', 'SP DEESPECIALIDADCAFE CIUDAD 000000000']
+
+  - categoria: Servicios
+    patron: 'HBOMAX|APPLE\.COM|ANTHROPIC'
+    ejemplos: ['HBOMAX', 'APPLE.COM/BILL', 'ANTHROPIC IRELAND DUBLIN 4 010079564']
+
+  - categoria: Uber Eats
+    patron: 'UBER.*EATS'
+    ejemplos: ['UBER   *EATS HELP.UBER.COM 000000000']
+
+  - categoria: Salud
+    patron: 'FCIA\.|FARMACIA'
+    ejemplos: ['FCIA. EJEMPLO\MADRID\ES0000000000', 'FARMACIA LOPEZ']
+
+  - categoria: Eventos/Ocio Puntual
+    patron: 'ANABEL LEE|OCHOYMEDIO|CROCANTICKETS'
+    ejemplos: ['OCHOYMEDIO CINE']
+
+  - categoria: Compras
+    patron: 'AMAZON|PERFUMERIA|ESPASA'
+    ejemplos: ['AMAZON EU']
+
+  - categoria: Tarjeta Crédito
+    patron: 'AMORTIZACION DEUDA'
+    ejemplos: ['AMORTIZACION DEUDA']
+
+  - categoria: Alquiler
+    patron: '^(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)$'
+    ejemplos: ['ENERO']

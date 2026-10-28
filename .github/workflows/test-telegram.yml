@@ -1,0 +1,28 @@
+name: test-telegram
+on:
+  workflow_dispatch: {}   # solo a mano: comprueba que el bot y el chat están bien configurados
+permissions:
+  contents: read
+concurrency:
+  group: test-telegram
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: prod
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Enviar mensaje de prueba
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::error::Faltan los secrets TELEGRAM_BOT_TOKEN y/o TELEGRAM_CHAT_ID en el environment prod"
+            exit 1
+          fi
+          echo "Prueba de enable-banking: si lees esto, los avisos por Telegram funcionan." > test.txt
+          bash scripts/notify.sh telegram "" test.txt

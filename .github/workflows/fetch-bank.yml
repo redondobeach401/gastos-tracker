@@ -1,0 +1,74 @@
+name: fetch-bank
+on:
+  workflow_dispatch: {}    # lo lanza a diario cron-job.org (API de GitHub); sin schedule aquí
+permissions:
+  contents: read
+concurrency:
+  group: fetch-bank
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: prod        # los secrets están en el environment prod
+    permissions:
+      contents: read
+      issues: write          # solo para publicar avisos como issue (scripts/notify.sh)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}   # opcional: sin él solo hay issue
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install --require-hashes -r requirements.txt
+      - run: python fetch.py
+        env:
+          EB_APP_ID: ${{ secrets.EB_APP_ID }}
+          EB_PRIVATE_KEY: ${{ secrets.EB_PRIVATE_KEY }}
+          EB_SESSIONS: ${{ secrets.EB_SESSIONS }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # opcional: sin ella no hay categorización con IA
+          CUTOFF_DATE: "2026-10-01"
+          ALERTS_FILE: alerts.md
+          ERRORES_FILE: errores.md      # qué cuentas no se pudieron leer, para el issue de fallo
+          RESUMEN_FILE: resumen.md
+      # Avisos (consentimiento a punto de caducar, cuenta sin movimientos): issue abierto mientras duren
+      # y mensaje de Telegram en cada ejecución en que sigan
+      - name: Publicar avisos
+        if: hashFiles('alerts.md') != ''
+        run: |
+          bash scripts/notify.sh open "enable-banking: avisos" alerts.md
+      - name: Cerrar avisos resueltos
+        if: hashFiles('alerts.md') == ''
+        run: |
+          bash scripts/notify.sh close "enable-banking: avisos"
+      # Resumen de gastos sin categoría: issue abierto mientras haya muchos; Telegram solo los lunes
+      - name: Publicar resumen de gastos sin categoría
+        if: hashFiles('resumen.md') != ''
+        env:
+          TELEGRAM_SOLO_LUNES: "1"
+        run: |
+          bash scripts/notify.sh open "enable-banking: gastos sin categoría" resumen.md
+      - name: Cerrar resumen resuelto
+        if: hashFiles('resumen.md') == ''
+        run: |
+          bash scripts/notify.sh close "enable-banking: gastos sin categoría"
+      # Fallo del workflow: issue con el enlace a la ejecución
+      - name: Avisar del fallo
+        if: failure()
+        run: |
+          printf '## El workflow fetch-bank ha fallado\n\n[Ver la ejecución](%s/%s/actions/runs/%s)\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > failure.md
+          if [ -f errores.md ]; then cat errores.md >> failure.md; fi
+          bash scripts/notify.sh open "enable-banking: fallo en el workflow" failure.md
+      - name: Cerrar aviso de fallo resuelto
+        if: success()
+        run: |
+          bash scripts/notify.sh close "enable-banking: fallo en el workflow"

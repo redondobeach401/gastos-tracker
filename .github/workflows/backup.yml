@@ -1,0 +1,60 @@
+name: backup
+on:
+  schedule:
+    - cron: "0 5 * * 0"      # domingos a las 05:00 UTC
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: prod
+    permissions:
+      contents: read
+      issues: write          # solo para avisar si falla (scripts/notify.sh)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install --require-hashes -r requirements.txt
+      - run: python backup.py transactions.csv saldos_iniciales.csv
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}   # rol app_backup, solo lectura
+          SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
+      # Los CSV nunca se suben en claro: se cifran con AES-256 y se borran los originales
+      - name: Cifrar
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          test -n "$BACKUP_PASSPHRASE" || { echo "Falta el secret BACKUP_PASSPHRASE" >&2; exit 1; }
+          for tabla in transactions saldos_iniciales; do
+            printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+              --symmetric --cipher-algo AES256 --output "$tabla-$(date +%F).csv.gpg" "$tabla.csv"
+            shred -u "$tabla.csv"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backup-transactions
+          path: "*.csv.gpg"
+          retention-days: 90
+          if-no-files-found: error
+      - name: Avisar del fallo
+        if: failure()
+        run: |
+          printf '## La copia de seguridad ha fallado\n\n[Ver la ejecución](%s/%s/actions/runs/%s)\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > failure.md
+          bash scripts/notify.sh open "enable-banking: fallo en la copia de seguridad" failure.md
+      - name: Cerrar aviso de fallo resuelto
+        if: success()
+        run: |
+          bash scripts/notify.sh close "enable-banking: fallo en la copia de seguridad"

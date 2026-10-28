@@ -1,0 +1,7 @@
+*.pem
+sessions.json
+.env
+__pycache__/
+.hypothesis/
+AUTH-SIN-TERMINAL.md
+FETCH-LOCAL.md
