@@ -1,4 +1,4 @@
-﻿-r requirements.in
+-r requirements.in
 pytest==9.1.1
 pre-commit==4.7.0
-hypothesis==6.170.0
+hypothesis==6.170.10
